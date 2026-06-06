@@ -7,8 +7,10 @@ module template_rom (
     reg [39:0] mem [0:783];
     reg [39:0] data_reg;
 
+    // Vivado resolves $readmemh relative to the project directory (.xpr location).
+    // Copy templates.hex to D:/Vivado_Projects/Digital/ or adjust path as needed.
     initial begin
-        $readmemh("templates.hex", mem);
+        $readmemh("D:/VSCode/MNIST/templates.hex", mem);
     end
 
     always @(posedge clk)

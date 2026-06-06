@@ -77,7 +77,7 @@ module vga_render (
             if (!s2_in_grid)
                 pixel_data <= 12'h333;                                 // dark gray background
             else if (s2_cursor_edge)
-                pixel_data <= s2_pen_down ? 12'h0F0 : 12'hF00;        // green : red cursor
+                pixel_data <= s2_pen_down ? 12'h0F0 : 12'h00F;        // green : red (BGR format)
             else if (s2_sub_x == 4'd0 || s2_sub_y == 4'd0)
                 pixel_data <= 12'h666;                                 // grid line
             else if (canvas_data > 4'd0)

@@ -4,10 +4,8 @@ module top (
     input  [6:0]    SW,            // SW[3:0]=dir, SW[6:4]=pen/recog/clear (posedge)
     input  [3:0]    btn_row,       // button matrix row inputs
     output [3:0]    btn_col,       // button matrix column outputs
-    output          seg_data,      // SEGDT  — 7-segment serial data
-    output          seg_clk,       // SEGCLK — 7-segment shift clock
-    output          seg_clr,       // SEGCLR — 7-segment active-low clear
-    output          seg_en,        // SEGEN  — 7-segment latch enable
+    output [3:0]    AN,            // Arduino 7-segment anode select (active-low)
+    output [7:0]    Segment,       // Arduino 7-segment {dp,g,f,e,d,c,b,a} (active-low)
     output [3:0]    R, G, B,       // VGA color
     output          HS, VS         // VGA sync
 );
@@ -159,16 +157,15 @@ module top (
         .best_digit    (matcher_best)
     );
 
-    // ── 7-Segment display driver ───────────────────────────────────
-    seg7_driver seg7_inst (
-        .clk     (clk),
-        .rst     (rst),
-        .digit   (fsm_result_digit),
-        .valid   (fsm_result_valid),
-        .seg_data(seg_data),
-        .seg_clk (seg_clk),
-        .seg_clr (seg_clr),
-        .seg_en  (seg_en)
+    // ── Arduino 4-digit 7-segment display ──────────────────────────
+    DisplayNumber display_inst (
+        .clk    (clk),
+        .RST    (rst),
+        .Hexs   ({12'd0, fsm_result_digit}),
+        .Points (4'd0),
+        .LES    ({3'b111, ~fsm_result_valid}),  // blank unused digits
+        .Segment(Segment),
+        .AN     (AN)
     );
 
     // ── CDC synchronizers: cursor signals 100MHz → 25MHz ──────────

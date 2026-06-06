@@ -6,7 +6,8 @@ The project aims to build an interactive handwritten digit recognition system on
 
 **Existing infrastructure:** Working VGA controller (`VGA.v`), clock divider (`clkdiv.v`), and a demo top module that draws a movable circle. These will be reused.
 
-**Target platform:** SWORD board — 100MHz clock, 16 switches, 16 buttons (4×4 matrix), 8-digit 7-segment display (via shift register), VGA RGB444 output.
+**Target platform:** SWORD board — 100MHz clock, 16 switches, 16 buttons (4×4 matrix), VGA RGB444 output.
+**Display:** Arduino sub-board 4-digit 7-segment (parallel time-multiplexed) — replaces unavailable onboard SN74LV164 serial display.
 
 ---
 
@@ -26,7 +27,7 @@ Replace the circle demo with a 28×28 pixel canvas displayed on VGA. Users navig
 | 4 | `template_rom` | ROM holding 10 digit templates (784×4-bit each, init from file) |
 | 5 | `matcher` | Parallel SAD engine comparing input against all 10 templates |
 | 6 | `recognizer_fsm` | State machine: IDLE → LATCH → MATCHING → SHOW → CLEARING |
-| 7 | `seg7_driver` | Serial driver for 7-segment display via shift register |
+| 7 | `DisplayNumber` | Arduino 4-digit 7-segment (parallel, time-multiplexed) |
 | 8 | `debounce` | Button debounce filter |
 | 9 | `button_matrix` | 4×4 matrix scanner for 16 buttons |
 | 10 | `top` | Top-level integration (replaces current circle-drawing top.v) |
@@ -48,7 +49,7 @@ recognizer_fsm ──> matcher ──> template_rom
                     │              ^
                     └──> grid_bram (Port B: read)
                          │
-                    seg7_driver <── recognizer_fsm
+                    DisplayNumber <── recognizer_fsm
 ```
 
 ### Module Specifications
@@ -93,10 +94,15 @@ recognizer_fsm ──> matcher ──> template_rom
 - **SHOW:** latch result, drive 7-segment, wait for clear or re-recognize
 - **CLEARING:** write zeros to all 784 grid addresses, return to IDLE
 
-#### 7. seg7_driver — 7-Segment Display
-- Serial protocol via SN74LV164 shift register (64 bits for 8 digits)
-- Rightmost digit shows result; others blank or show confidence indicator
-- 7-seg encoding stored as LUT (8'hC0 for '0', etc.)
+#### 7. DisplayNumber — Arduino 4-Digit 7-Segment (reused from Lab10)
+
+Reuse `DisplayNumber.v` from `D:\Vivado_Projects\Lab10_RevCounter\...` — proven on this board. Parallel time-multiplexed interface (AN[3:0] + Segment[7:0]) replaces the unavailable SN74LV164 serial display.
+
+- **Modify copied file:** strip internal `clkdiv` definition (conflicts with our `clkdiv.v`). Keep `MyMC14495`, `DisplaySync`, `DisplayNumber`
+- **Interface:** `Hexs[15:0]`, `Points[3:0]`, `LES[3:0]` in; `AN[3:0]`, `Segment[7:0]` out
+- **Wiring:** `Hexs = {12'd0, fsm_result_digit}`, `LES = {3'b111, ~fsm_result_valid}` (blanks unused digits), `Points = 4'd0`
+- **Scanning:** ~190Hz via our `clkdiv`'s `div_res[18:17]`
+- **Replaces:** `seg7_driver.v` — deleted
 
 #### 8. button_matrix — integrated scanner + debounce
 - Single module: 4×4 matrix scanner + 16× Anti_jitter instances in one unit
@@ -106,8 +112,9 @@ recognizer_fsm ──> matcher ──> template_rom
 
 #### 9. top — Top-Level Integration
 - Instantiates all modules; wires clock domains with 2-flop synchronizers
-- Reuses existing `VGA.xdc` for VGA pins; adds button matrix + 7-segment constraints
-- Routes `match_busy` and state bits to LEDs for live status
+- VGA pins in `vga.xdc`; SW/clk/rst in `K7.xdc`; Arduino seg7 pins TBD
+- SW[6:4] posedge for pen/recognize/clear (replaces buttons via btn_edge)
+- Ports: `AN[3:0]`, `Segment[7:0]` (Arduino parallel) replace `seg_data/clk/clr/en`
 
 ### Recognition Algorithm: Two-Phase Strategy
 
@@ -127,7 +134,7 @@ If higher accuracy is desired later, replace only 3 files at the module boundary
 | `matcher.v` | `mlp_engine.v` | MAC sequencer + ReLU LUT + argmax instead of SAD |
 | `gen_templates.py` | `train_mlp.py` | PyTorch training + quantized weight export |
 
-All other modules untouched — same handshake (`start` → `done` + `digit[3:0]`), same `canvas_ram` data source, same `recognizer_fsm`/`seg7_driver`/VGA pipeline.
+All other modules untouched — same handshake (`start` → `done` + `digit[3:0]`), same `canvas_ram` data source, same `recognizer_fsm`/`DisplayNumber`/VGA pipeline.
 
 ### Canvas-to-VGA Mapping
 
@@ -167,7 +174,7 @@ All other modules untouched — same handshake (`start` → `done` + `digit[3:0]
 11. Create `template_rom.v` (init via `$readmemh`)
 12. Create `matcher.v` (10 parallel SAD + comparator tree)
 13. Create `recognizer_fsm.v` (5-state FSM)
-14. Create `seg7_driver.v` (shift register protocol)
+14. Import `DisplayNumber.v` from Lab10 (Arduino 7-seg), strip internal `clkdiv`
 15. Wire everything into top.v
 
 **Phase 4 — Integration & Polish**
@@ -207,7 +214,8 @@ All other modules untouched — same handshake (`start` → `done` + `digit[3:0]
 | `source_1/template_rom.v` | Create | Template storage |
 | `source_1/matcher.v` | Create | SAD matching engine |
 | `source_1/recognizer_fsm.v` | Create | Recognition FSM |
-| `source_1/seg7_driver.v` | Create | 7-seg display driver |
+| `source_1/seg7_driver.v` | Delete | Replaced by DisplayNumber.v |
+| `source_1/DisplayNumber.v` | Import | Arduino 4-digit 7-seg (from Lab10, clkdiv stripped) |
 | `scripts/gen_templates.py` | Create | Offline template generator |
 | `source_1/clkdiv.v` | Unchanged | Clock divider |
 | `source_1/VGA.v` | Unchanged | VGA timing controller |
