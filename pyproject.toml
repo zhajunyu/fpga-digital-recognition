@@ -1,0 +1,15 @@
+[project]
+name = "fpga-digital-recognition-mlp"
+version = "0.1.0"
+description = "MLP training and drawing verification tools for the FPGA digit-recognition project."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "torch>=2.3",
+    "torchvision>=0.18",
+]
+
+[tool.uv]
+package = false
+

@@ -1,0 +1,7 @@
+{
+  "input_scale": 0.00392156862745098,
+  "w1_scale": 0.005490892515407773,
+  "w2_scale": 0.006322106507819469,
+  "format": "signed two's-complement hex, row-major weights by output neuron",
+  "note": "These files are for the later Verilog inference engine; Python verifier uses float checkpoint."
+}
