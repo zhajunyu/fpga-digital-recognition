@@ -1,0 +1,19 @@
+{
+  "hidden_shift": 10,
+  "hidden_shift_stats": {
+    "clip_rate": 0.00045755208333333336,
+    "max_hidden": 442.0
+  },
+  "math": {
+    "hidden": "h8 = clamp(ReLU(acc1) >>> HIDDEN_SHIFT, 0, 255)",
+    "input": "x8 = canvas_data * 17",
+    "layer1": "acc1 = b1_q + sum(x8 * w1_q)",
+    "layer2": "logit = b2_hw_q + sum(h8 * w2_q)"
+  },
+  "min_accuracy": 0.965,
+  "mnist_correct": 9791,
+  "mnist_fixed_point_accuracy": 0.9791,
+  "mnist_total": 10000,
+  "user_image_count": 0,
+  "user_results": []
+}

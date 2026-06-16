@@ -55,23 +55,26 @@ module top (
 
     // ── Recognition FSM ────────────────────────────────────────────
     wire        fsm_freeze;
-    wire        fsm_matcher_start;
+    wire        fsm_recognizer_start;
     wire        fsm_matching;
     wire        fsm_clearing;
     wire        fsm_clear_we;
     wire [9:0]  fsm_clear_addr;
     wire [3:0]  fsm_result_digit;
     wire        fsm_result_valid;
+    wire        recognizer_done;
+    wire [3:0]  recognizer_best;
+    wire [9:0]  recognizer_canv_addr;
 
     recognizer_fsm fsm_inst (
         .clk          (clk),
         .rst          (rst),
         .recog_btn    (sw5_posedge),
         .clear_btn    (sw6_posedge),
-        .matcher_done (matcher_done),
-        .matcher_digit(matcher_best),
+        .matcher_done (recognizer_done),
+        .matcher_digit(recognizer_best),
         .freeze       (fsm_freeze),
-        .matcher_start(fsm_matcher_start),
+        .matcher_start(fsm_recognizer_start),
         .matching     (fsm_matching),
         .clearing     (fsm_clearing),
         .clear_we     (fsm_clear_we),
@@ -105,7 +108,7 @@ module top (
 
     // ── Canvas RAM (dual-port BRAM) ────────────────────────────────
     // Port A: 25MHz — VGA rendering reads
-    // Port B: 100MHz — muxed between draw / matcher / clearing
+    // Port B: 100MHz — muxed between draw / MLP recognizer / clearing
     wire [9:0]  canvas_addr_a;
     wire [3:0]  canvas_dout_a;
     wire        canvas_we_b;
@@ -116,7 +119,7 @@ module top (
     // Port B arbitration
     assign canvas_we_b   = (~fsm_freeze && draw_grid_we) || fsm_clear_we;
     assign canvas_addr_b = fsm_clearing  ? fsm_clear_addr   :
-                           fsm_matching  ? matcher_canv_addr : draw_grid_addr;
+                           fsm_matching  ? recognizer_canv_addr : draw_grid_addr;
     assign canvas_din_b  = fsm_clearing  ? 4'd0             : draw_grid_din;
 
     canvas_ram canvas_inst (
@@ -130,31 +133,15 @@ module top (
         .dout_b(canvas_dout_b)
     );
 
-    // ── Template ROM ───────────────────────────────────────────────
-    wire [9:0]  tmpl_addr;
-    wire [39:0] tmpl_data;
-
-    template_rom tmpl_inst (
-        .clk (clk),
-        .addr(tmpl_addr),
-        .data(tmpl_data)
-    );
-
-    // ── Matcher (SAD engine) ───────────────────────────────────────
-    wire        matcher_done;
-    wire [3:0]  matcher_best;
-    wire [9:0]  matcher_canv_addr;
-
-    matcher matcher_inst (
-        .clk           (clk),
-        .rst           (rst),
-        .start         (fsm_matcher_start),
-        .canvas_data   (canvas_dout_b),
-        .template_data (tmpl_data),
-        .canvas_addr   (matcher_canv_addr),
-        .template_addr (tmpl_addr),
-        .done          (matcher_done),
-        .best_digit    (matcher_best)
+    // ── MLP recognizer (784 → 256 → 10 fixed-point inference) ─────
+    mlp_engine recognizer_inst (
+        .clk        (clk),
+        .rst        (rst),
+        .start      (fsm_recognizer_start),
+        .canvas_data(canvas_dout_b),
+        .canvas_addr(recognizer_canv_addr),
+        .done       (recognizer_done),
+        .best_digit (recognizer_best)
     );
 
     // ── Arduino 4-digit 7-segment display ──────────────────────────
