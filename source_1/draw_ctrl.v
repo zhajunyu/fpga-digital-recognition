@@ -21,13 +21,71 @@ module draw_ctrl (
     wire move_u = dir[2] && cursor_y > 5'd0;
     wire move_d = dir[3] && cursor_y < GRID_MAX;
 
-    wire moving = move_l || move_r || move_u || move_d;
-
     // Next cursor position after this tick
     wire [4:0] next_x = move_l ? (cursor_x - 5'd1) :
                          move_r ? (cursor_x + 5'd1) : cursor_x;
     wire [4:0] next_y = move_u ? (cursor_y - 5'd1) :
                          move_d ? (cursor_y + 5'd1) : cursor_y;
+
+    // 3x3 brush writer. The canvas RAM accepts one write per 100MHz cycle,
+    // so one pen stroke is emitted over up to nine fast cycles.
+    reg       brush_active;
+    reg [3:0] brush_idx;
+    reg [4:0] brush_cx, brush_cy;
+
+    reg       brush_valid;
+    reg [4:0] brush_x, brush_y;
+
+    always @(*) begin
+        brush_valid = 1'b1;
+        brush_x = brush_cx;
+        brush_y = brush_cy;
+
+        case (brush_idx)
+            4'd0: begin // -1, -1
+                brush_valid = (brush_cx > 5'd0) && (brush_cy > 5'd0);
+                brush_x = brush_cx - 5'd1;
+                brush_y = brush_cy - 5'd1;
+            end
+            4'd1: begin //  0, -1
+                brush_valid = (brush_cy > 5'd0);
+                brush_y = brush_cy - 5'd1;
+            end
+            4'd2: begin // +1, -1
+                brush_valid = (brush_cx < GRID_MAX) && (brush_cy > 5'd0);
+                brush_x = brush_cx + 5'd1;
+                brush_y = brush_cy - 5'd1;
+            end
+            4'd3: begin // -1,  0
+                brush_valid = (brush_cx > 5'd0);
+                brush_x = brush_cx - 5'd1;
+            end
+            4'd4: begin //  0,  0
+                brush_valid = 1'b1;
+            end
+            4'd5: begin // +1,  0
+                brush_valid = (brush_cx < GRID_MAX);
+                brush_x = brush_cx + 5'd1;
+            end
+            4'd6: begin // -1, +1
+                brush_valid = (brush_cx > 5'd0) && (brush_cy < GRID_MAX);
+                brush_x = brush_cx - 5'd1;
+                brush_y = brush_cy + 5'd1;
+            end
+            4'd7: begin //  0, +1
+                brush_valid = (brush_cy < GRID_MAX);
+                brush_y = brush_cy + 5'd1;
+            end
+            4'd8: begin // +1, +1
+                brush_valid = (brush_cx < GRID_MAX) && (brush_cy < GRID_MAX);
+                brush_x = brush_cx + 5'd1;
+                brush_y = brush_cy + 5'd1;
+            end
+            default: begin
+                brush_valid = 1'b0;
+            end
+        endcase
+    end
 
     always @(posedge clk) begin
         if (rst) begin
@@ -37,6 +95,10 @@ module draw_ctrl (
             grid_we   <= 1'b0;
             grid_addr <= 10'd0;
             grid_din  <= 4'd0;
+            brush_active <= 1'b0;
+            brush_idx    <= 4'd0;
+            brush_cx     <= 5'd14;
+            brush_cy     <= 5'd14;
         end else begin
             grid_we <= 1'b0;  // default: no write
 
@@ -47,22 +109,35 @@ module draw_ctrl (
                 cursor_x <= 5'd14;
                 cursor_y <= 5'd14;
                 pen_down <= 1'b0;
-            end
+                brush_active <= 1'b0;
+                brush_idx <= 4'd0;
+            end else if (brush_active) begin
+                if (brush_valid) begin
+                    grid_we   <= 1'b1;
+                    grid_addr <= {5'd0, brush_y} * 10'd28 + {5'd0, brush_x};
+                    grid_din  <= 4'hF;
+                end
 
-            if (tick) begin
+                if (brush_idx == 4'd8) begin
+                    brush_active <= 1'b0;
+                    brush_idx <= 4'd0;
+                end else begin
+                    brush_idx <= brush_idx + 4'd1;
+                end
+            end else if (tick) begin
                 // Move cursor (clamped at edges)
                 if (move_l) cursor_x <= cursor_x - 5'd1;
                 if (move_r) cursor_x <= cursor_x + 5'd1;
                 if (move_u) cursor_y <= cursor_y - 5'd1;
                 if (move_d) cursor_y <= cursor_y + 5'd1;
 
-                // Write cell at the new (or current) position when pen is down.
-                // next_x / next_y already reflect where the cursor will land,
-                // or the current cell if no direction is pressed.
+                // Start a 3x3 brush stroke centered at the new (or current)
+                // cursor position when pen is down.
                 if (pen_down) begin
-                    grid_we   <= 1'b1;
-                    grid_addr <= {5'd0, next_y} * 10'd28 + {5'd0, next_x};
-                    grid_din  <= 4'hF;
+                    brush_active <= 1'b1;
+                    brush_idx <= 4'd0;
+                    brush_cx <= next_x;
+                    brush_cy <= next_y;
                 end
             end
         end
